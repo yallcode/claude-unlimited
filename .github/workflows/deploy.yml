@@ -29,6 +29,19 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+        
+      - name: Verify Supabase configuration
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          test -n "$VITE_SUPABASE_URL" || { echo "::error::Supabase URL is missing"; exit 1; }
+          test -n "$VITE_SUPABASE_ANON_KEY" || { echo "::error::Supabase publishable key is missing"; exit 1; }
+          test -n "$VITE_API_URL" || { echo "::error::Worker URL is missing"; exit 1; }
+          echo "All frontend configuration variables are present."
+
+        
       - name: Build website
         run: npm run build
         env:
