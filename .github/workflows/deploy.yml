@@ -1,9 +1,11 @@
+
 name: Build and deploy Claude Unlimited
 
 on:
   push:
     branches:
       - main
+
   workflow_dispatch:
 
 permissions:
@@ -25,23 +27,34 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-        
-      - name: Verify Supabase configuration
+      - name: Verify frontend variables
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: |
-          test -n "$VITE_SUPABASE_URL" || { echo "::error::Supabase URL is missing"; exit 1; }
-          test -n "$VITE_SUPABASE_ANON_KEY" || { echo "::error::Supabase publishable key is missing"; exit 1; }
-          test -n "$VITE_API_URL" || { echo "::error::Worker URL is missing"; exit 1; }
-          echo "All frontend configuration variables are present."
+          test -n "$VITE_SUPABASE_URL" || {
+            echo "::error::Missing VITE_SUPABASE_URL"
+            exit 1
+          }
 
-        
+          test -n "$VITE_SUPABASE_ANON_KEY" || {
+            echo "::error::Missing VITE_SUPABASE_ANON_KEY"
+            exit 1
+          }
+
+          test -n "$VITE_API_URL" || {
+            echo "::error::Missing VITE_API_URL"
+            exit 1
+          }
+
+          echo "Frontend variables verified."
+
       - name: Build website
         run: npm run build
         env:
@@ -49,7 +62,17 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_API_URL: ${{ vars.VITE_API_URL }}
 
-      - name: Upload Pages artifact
+      - name: Verify build output
+        run: |
+          test -f dist/index.html || {
+            echo "::error::dist/index.html was not generated"
+            exit 1
+          }
+
+          echo "Build output verified."
+          ls -la dist
+
+      - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
