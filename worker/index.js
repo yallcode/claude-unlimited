@@ -1,24 +1,13 @@
 
-const ALLOWED_ORIGINS = [
-  "https://yallcode.github.io"
-];
+const ALLOWED_ORIGINS = ["https://yallcode.github.io"];
 
 function getAllowedOrigins(env) {
-  const configured = (env.ALLOWED_ORIGIN || "")
-    .split(",")
-    .map(value => value.trim())
-    .filter(Boolean);
-
+  const configured = (env.ALLOWED_ORIGIN || "").split(",").map(v => v.trim()).filter(Boolean);
   return configured.length ? configured : ALLOWED_ORIGINS;
 }
 
 function corsHeaders(origin, env) {
-  const allowed = getAllowedOrigins(env);
-
-  if (!origin || !allowed.includes(origin)) {
-    return {};
-  }
-
+  if (!origin || !getAllowedOrigins(env).includes(origin)) return {};
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -44,86 +33,77 @@ export default {
     const origin = request.headers.get("Origin") || "";
     const url = new URL(request.url);
     const path = url.pathname;
-
     const allowed = getAllowedOrigins(env);
 
-    // Reject unauthorized browser origins.
     if (origin && !allowed.includes(origin)) {
-      return json({ error: "Origin not allowed." }, 403, "", env);
+      return json({error:"Origin not allowed."},403,"",env);
     }
 
-    // Handle browser preflight requests before authentication.
     if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders(origin, env)
+      return new Response(null,{
+        status:204,
+        headers:corsHeaders(origin,env)
       });
     }
 
-    // Health endpoint.
     if (path === "/health" && request.method === "GET") {
       return json({
-        status: "online",
-        service: "Claude Unlimited API",
-        provider: "Anthropic",
-        version: "3.0.0"
-      }, 200, origin, env);
+        status:"online",
+        service:"Claude-inspired free-first AI workspace",
+        inAppProvider:"Gemini free tier",
+        claude:"Official Claude opens separately at claude.ai",
+        version:"4.0.0"
+      },200,origin,env);
     }
 
-    // Chat endpoint.
     if (path !== "/chat" || request.method !== "POST") {
       return json({
-        error: "Not found.",
-        endpoints: ["/health", "/chat"]
-      }, 404, origin, env);
+        error:"Not found.",
+        endpoints:["/health","/chat"]
+      },404,origin,env);
     }
 
-    // Required configuration.
     if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
       return json({
-        error: "Supabase configuration is missing on the Worker."
-      }, 500, origin, env);
+        error:"Supabase configuration is missing on the Worker."
+      },500,origin,env);
     }
 
-    if (!env.ANTHROPIC_API_KEY) {
+    if (!env.GEMINI_API_KEY) {
       return json({
-        error: "Anthropic API key is missing on the Worker."
-      }, 503, origin, env);
+        error:"Gemini API key is missing. Add GEMINI_API_KEY as a Cloudflare Worker Secret."
+      },503,origin,env);
     }
 
-    // Verify the user's Supabase session.
     const authorization = request.headers.get("Authorization") || "";
 
     if (!authorization.startsWith("Bearer ")) {
-      return json({
-        error: "Sign in is required."
-      }, 401, origin, env);
+      return json({error:"Sign in is required."},401,origin,env);
     }
 
     try {
       const authCheck = await fetch(
-        `${env.SUPABASE_URL.replace(/\/$/, "")}/auth/v1/user`,
+        `${env.SUPABASE_URL.replace(/\/$/,"")}/auth/v1/user`,
         {
-          headers: {
-            "apikey": env.SUPABASE_ANON_KEY,
-            "Authorization": authorization
+          headers:{
+            "apikey":env.SUPABASE_ANON_KEY,
+            "Authorization":authorization
           }
         }
       );
 
       if (!authCheck.ok) {
         return json({
-          error: "Your session is invalid or expired. Sign in again."
-        }, 401, origin, env);
+          error:"Your session is invalid or expired. Sign in again."
+        },401,origin,env);
       }
 
-      // Read and validate request body.
       const rawBody = await request.text();
 
       if (new TextEncoder().encode(rawBody).length > 150000) {
         return json({
-          error: "Request is too large. Maximum size is 150 KB."
-        }, 413, origin, env);
+          error:"Request is too large. Maximum size is 150 KB."
+        },413,origin,env);
       }
 
       let body;
@@ -131,111 +111,116 @@ export default {
       try {
         body = JSON.parse(rawBody);
       } catch {
-        return json({
-          error: "Invalid JSON request."
-        }, 400, origin, env);
+        return json({error:"Invalid JSON request."},400,origin,env);
       }
 
-      const {
-        provider,
-        model,
-        system,
-        messages
-      } = body || {};
+      const {provider,model,system,messages} = body || {};
 
-      // This Worker currently supports Anthropic only.
-      if (provider !== "Anthropic") {
+      if (provider !== "Gemini") {
         return json({
-          error: "This Worker currently supports Anthropic only."
-        }, 400, origin, env);
+          error:"This free-first Worker only supports Gemini in-app. Open official Claude using the Open Claude button."
+        },400,origin,env);
       }
 
-      if (
-        typeof model !== "string" ||
-        !/^[a-zA-Z0-9._:-]{1,100}$/.test(model)
-      ) {
+      // Only permit this configured model.
+      const allowedModel = "gemini-3.8-flash";
+
+      if (model !== allowedModel) {
         return json({
-          error: "Invalid model ID."
-        }, 400, origin, env);
+          error:"This Worker only permits gemini-3.8-flash. Select the free-tier model in settings."
+        },400,origin,env);
       }
 
-      if (
-        !Array.isArray(messages) ||
-        messages.length < 1 ||
-        messages.length > 40
-      ) {
+      if (!Array.isArray(messages) || messages.length < 1 || messages.length > 40) {
         return json({
-          error: "Send between 1 and 40 messages."
-        }, 400, origin, env);
+          error:"Send between 1 and 40 messages."
+        },400,origin,env);
       }
 
-      const cleanMessages = messages.map(message => ({
-        role: message?.role === "assistant" ? "assistant" : "user",
-        content: typeof message?.content === "string"
-          ? message.content.slice(0, 50000)
-          : ""
-      })).filter(message => message.content.trim());
+      const cleanMessages = messages.map(m => ({
+        role:m?.role === "assistant" ? "model" : "user",
+        parts:[{
+          text:typeof m?.content === "string"
+            ? m.content.slice(0,50000)
+            : ""
+        }]
+      })).filter(m => m.parts[0].text.trim());
 
       if (!cleanMessages.length) {
-        return json({
-          error: "Message content is empty."
-        }, 400, origin, env);
+        return json({error:"Message content is empty."},400,origin,env);
       }
 
-      const systemText =
-        typeof system === "string" && system.trim()
-          ? system.slice(0, 10000)
-          : "You are a helpful AI assistant.";
+      const systemText = typeof system === "string" && system.trim()
+        ? system.slice(0,10000)
+        : "You are a helpful, accurate AI assistant.";
 
-      // Connect to Anthropic.
       const upstream = await fetch(
-        "https://api.anthropic.com/v1/messages",
+        `https://generativelanguage.googleapis.com/v1beta/models/${allowedModel}:generateContent`,
         {
-          method: "POST",
-          headers: {
-            "x-api-key": env.ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            "x-goog-api-key":env.GEMINI_API_KEY
           },
-          body: JSON.stringify({
-            model,
-            max_tokens: 4096,
-            system: systemText,
-            messages: cleanMessages
+          body:JSON.stringify({
+            systemInstruction:{
+              parts:[{text:systemText}]
+            },
+            contents:cleanMessages,
+            generationConfig:{
+              maxOutputTokens:4096,
+              temperature:0.7
+            }
           })
         }
       );
 
-      const payload = await upstream.json();
+      const payload = await upstream.json().catch(()=>({}));
 
       if (!upstream.ok) {
-        console.error("Anthropic API error:", upstream.status);
+        const message = payload.error?.message || "Gemini request failed.";
+
+        console.error(
+          "Gemini API error:",
+          upstream.status,
+          message
+        );
 
         return json({
-          error: payload.error?.message ||
-            "Anthropic request failed.",
-          status: upstream.status
-        }, upstream.status, origin, env);
+          error:message,
+          status:upstream.status
+        },upstream.status,origin,env);
       }
 
-      const content = (payload.content || [])
-        .filter(item => item.type === "text")
-        .map(item => item.text)
-        .join("\n");
+      const content = (
+        payload.candidates?.[0]?.content?.parts || []
+      )
+        .map(part => part.text || "")
+        .join("\n")
+        .trim();
+
+      if (!content) {
+        return json({
+          error:"Gemini returned no text. The response may have been blocked or empty."
+        },502,origin,env);
+      }
 
       return json({
         content,
-        model: payload.model || model,
-        provider: "Anthropic",
-        usage: payload.usage || null
-      }, 200, origin, env);
+        model:allowedModel,
+        provider:"Gemini",
+        usage:payload.usageMetadata || null
+      },200,origin,env);
 
     } catch (error) {
-      console.error("Worker request failed:", error.message);
+      console.error(
+        "Worker request failed:",
+        error?.message || error
+      );
 
       return json({
-        error: "Provider connection failed. Please try again."
-      }, 502, origin, env);
+        error:"Provider connection failed. Please try again."
+      },502,origin,env);
     }
   }
 };
